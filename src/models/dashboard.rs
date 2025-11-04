@@ -33,9 +33,9 @@ pub struct DashboardRoute {
     pub buy_sector: String,
     pub sell_station: String,
     pub sell_sector: String,
-    pub profit: i64,
-    pub buy_price: i32,
-    pub sell_price: i32,
+    pub profit: f64,
+    pub buy_price: f64,
+    pub sell_price: f64,
     pub amount: i32,
 }
 

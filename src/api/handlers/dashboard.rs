@@ -1,5 +1,4 @@
 use axum::{extract::State, http::StatusCode, Json};
-use std::collections::HashMap;
 
 use crate::models::{
     DashboardResponse, DashboardPlayer, DashboardStats, DashboardRoute, DashboardSector,
@@ -79,8 +78,8 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
     let filters = TradeFilters {
         sectors: None,
         wares: None,
+        ship_id: None,
         cargo_volume: Some(5000.0),
-        min_profit_per_volume: None,
         same_sector_only: false,
         group_by_ware: false,
     };
@@ -101,7 +100,7 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
     }
 
     // Sort by profit desc and take top 5
-    offers.sort_by(|a, b| b.profit.cmp(&a.profit));
+    offers.sort_by(|a, b| b.total_profit.partial_cmp(&a.total_profit).unwrap_or(std::cmp::Ordering::Equal));
     let top_routes: Vec<DashboardRoute> = offers
         .into_iter()
         .take(5)
@@ -112,10 +111,10 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
             buy_sector: offer.buy_sector.clone(),
             sell_station: offer.sell_station.clone(),
             sell_sector: offer.sell_sector.clone(),
-            profit: offer.profit,
+            profit: offer.total_profit,
             buy_price: offer.buy_price,
             sell_price: offer.sell_price,
-            amount: offer.amount,
+            amount: offer.qty,
         })
         .collect();
 

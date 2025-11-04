@@ -1,5 +1,4 @@
 use axum::{extract::State, http::StatusCode, Json};
-use serde::Serialize;
 
 use crate::models::{PilotInfo, PlayerPropertyResponse, PlayerAsset, PlayerNpc};
 
