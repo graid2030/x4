@@ -1,12 +1,18 @@
+mod maps;
+mod players;
+mod sectors;
+mod trades;
+
 use axum::http::StatusCode;
-use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
+use std::collections::{hash_map::DefaultHasher, HashMap};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::api::handlers::SaveData;
-use crate::models::{StationCount, StationSummary, StationWare};
+use crate::models::StationSummary;
+use crate::parsers::pilot_xml::extract_pilot_info;
 use crate::parsers::save_xml::{
     extract_all_trades, extract_sectors, extract_station_data, load_save_file, StationParseResult,
 };
@@ -91,18 +97,19 @@ impl SaveDataRepository {
             return Ok(());
         }
 
-        let save_content =
+        let save_string =
             load_save_file(&save_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         let mut hasher = DefaultHasher::new();
-        save_content.hash(&mut hasher);
+        save_string.hash(&mut hasher);
         let content_hash = format!("{:016x}", hasher.finish());
+        let save_content = Arc::new(save_string);
 
-        let (sectors, trades, StationParseResult { stations, counts }) = {
+        let (sectors, trades, StationParseResult { stations, counts }, pilot) = {
             let guard = self.game_data.read().await;
             let game = guard.as_ref().ok_or(StatusCode::BAD_REQUEST)?;
 
             let sectors = extract_sectors(
-                &save_content,
+                save_content.as_ref(),
                 &game.sector_names,
                 &game.component_names,
                 &game.sector_code_names,
@@ -111,7 +118,7 @@ impl SaveDataRepository {
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
             let trades = extract_all_trades(
-                &save_content,
+                save_content.as_ref(),
                 &game.sector_names,
                 &game.component_names,
                 &game.localization,
@@ -120,14 +127,16 @@ impl SaveDataRepository {
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
             let station_parse = extract_station_data(
-                &save_content,
+                save_content.as_ref(),
                 &game.component_names,
                 &game.faction_names,
                 &game.localization,
             )
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-            (sectors, trades, station_parse)
+            let pilot = extract_pilot_info(save_content.as_ref(), &game.localization).ok();
+
+            (sectors, trades, station_parse, pilot)
         };
 
         let mut station_lookup: HashMap<String, StationSummary> = HashMap::new();
@@ -145,6 +154,12 @@ impl SaveDataRepository {
             save.station_lookup = station_lookup;
             save.last_modified = modified;
             save.content_hash = Some(content_hash);
+            save.pilot = pilot;
+            save.save_content = Some(save_content);
+            save.player_assets = None;
+            save.player_npcs = None;
+            save.sector_maps.clear();
+            save.stations_by_sector.clear();
         }
 
         Ok(())
@@ -152,54 +167,5 @@ impl SaveDataRepository {
 
     pub async fn ensure_latest(&self) -> Result<(), StatusCode> {
         self.refresh_if_needed().await
-    }
-
-    pub async fn get_trades(
-        &self,
-        sectors: Option<&[String]>,
-    ) -> Result<HashMap<String, Vec<StationWare>>, StatusCode> {
-        self.refresh_if_needed().await?;
-        let guard = self.save_data.read().await;
-        let save = guard.as_ref().ok_or(StatusCode::BAD_REQUEST)?;
-
-        if let Some(sector_filter) = sectors {
-            let filter: HashSet<&str> = sector_filter.iter().map(|s| s.as_str()).collect();
-            let filtered = save
-                .trades_by_sector
-                .iter()
-                .filter(|(code, _)| filter.contains(code.as_str()))
-                .map(|(code, trades)| (code.clone(), trades.clone()))
-                .collect();
-            Ok(filtered)
-        } else {
-            Ok(save.trades_by_sector.clone())
-        }
-    }
-
-    pub async fn get_all_trades(&self) -> Result<HashMap<String, Vec<StationWare>>, StatusCode> {
-        self.get_trades(None).await
-    }
-
-    pub async fn get_station_counts(&self) -> Result<HashMap<String, StationCount>, StatusCode> {
-        self.refresh_if_needed().await?;
-        let guard = self.save_data.read().await;
-        let save = guard.as_ref().ok_or(StatusCode::BAD_REQUEST)?;
-        Ok(save.station_counts.clone())
-    }
-
-    #[allow(dead_code)]
-    pub async fn list_stations(&self) -> Result<Vec<StationSummary>, StatusCode> {
-        self.refresh_if_needed().await?;
-        let guard = self.save_data.read().await;
-        let save = guard.as_ref().ok_or(StatusCode::BAD_REQUEST)?;
-        Ok(save.stations.clone())
-    }
-
-    #[allow(dead_code)]
-    pub async fn get_station(&self, code: &str) -> Result<Option<StationSummary>, StatusCode> {
-        self.refresh_if_needed().await?;
-        let guard = self.save_data.read().await;
-        let save = guard.as_ref().ok_or(StatusCode::BAD_REQUEST)?;
-        Ok(save.station_lookup.get(code).cloned())
     }
 }

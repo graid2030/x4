@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use crate::parsers::game_xml::resolve_name;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct Context {
@@ -33,7 +33,9 @@ pub fn find_parent_station(stack: &[Context]) -> Option<&Context> {
             if let Some(class) = ctx.attrs.get("class") {
                 if class == "station" {
                     if let Some(state) = ctx.attrs.get("state") {
-                        if state == "wreck" { return None; }
+                        if state == "wreck" {
+                            return None;
+                        }
                     }
                     return Some(ctx);
                 }
@@ -42,7 +44,9 @@ pub fn find_parent_station(stack: &[Context]) -> Option<&Context> {
         // Stop if we walked up to a sector boundary
         if ctx.tag == "component" {
             if let Some(class) = ctx.attrs.get("class") {
-                if class == "sector" { return None; }
+                if class == "sector" {
+                    return None;
+                }
             }
         }
     }
@@ -79,7 +83,7 @@ fn capitalize_words(s: &str) -> String {
 
 /// Build factory name from source entry
 /// entry format: "arg_hullparts" → "ARG Hull Parts Factory I"
-fn build_factory_name(entry: &str, nameindex: u32) -> String {
+pub(super) fn build_factory_name(entry: &str, nameindex: u32) -> String {
     let parts: Vec<&str> = entry.split('_').collect();
     if parts.len() >= 2 {
         let faction = parts[0].to_uppercase();
@@ -128,17 +132,22 @@ pub fn get_station_name(
 
     // Priority 2: Factory name from source/entry
     if let Some(entry) = &station.source_entry {
-        let nameindex = station.source_nameindex
+        let nameindex = station
+            .source_nameindex
             .or_else(|| station.attrs.get("nameindex").and_then(|s| s.parse().ok()))
             .unwrap_or(1);
         return build_factory_name(entry, nameindex);
     }
 
     // Priority 3: Base name from component_names
-    if let Some(base_name) = station.attrs.get("macro")
+    if let Some(base_name) = station
+        .attrs
+        .get("macro")
         .and_then(|m| component_names.get(&m.to_lowercase()))
     {
-        let nameindex = station.attrs.get("nameindex")
+        let nameindex = station
+            .attrs
+            .get("nameindex")
             .and_then(|s| s.parse::<u32>().ok())
             .unwrap_or(0);
         if nameindex > 0 {

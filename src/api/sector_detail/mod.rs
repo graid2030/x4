@@ -1,13 +1,12 @@
-mod helpers;
-mod station_parser;
-
-use axum::{extract::{Path, State}, http::StatusCode, Json};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    Json,
+};
 use std::collections::HashSet;
 
 use crate::api::handlers::AppState;
 use crate::models::{SectorDetailResponse, SectorDetailStats, TradeOfferDetail, TradeType};
-use crate::parsers::load_save_file;
-use station_parser::extract_stations_for_sector;
 
 /// Get detailed information about a specific sector
 pub async fn get_sector_detail(
@@ -25,16 +24,17 @@ pub async fn get_sector_detail(
     };
 
     // Find sector by code
-    let sector = save.sectors.iter()
+    let sector = save
+        .sectors
+        .iter()
         .find(|s| s.code == sector_code)
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Load save file for station extraction
-    let save_content = load_save_file(&save.save_path)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Extract stations for this sector
-    let stations = extract_stations_for_sector(&save_content, &sector_code, &game.component_names, &game.faction_names)?;
+    // Extract stations for this sector via repository cache
+    let stations = state
+        .save_repository
+        .get_sector_stations(&sector_code)
+        .await?;
 
     // Use cached trades for this sector
     let filter = [sector_code.clone()];
@@ -83,7 +83,10 @@ pub async fn get_sector_detail(
     }
 
     // Calculate stats
-    let player_stations_count = stations.iter().filter(|s| s.owner.as_ref().map(|o| o == "player").unwrap_or(false)).count();
+    let player_stations_count = stations
+        .iter()
+        .filter(|s| s.owner.as_ref().map(|o| o == "player").unwrap_or(false))
+        .count();
 
     let stats = SectorDetailStats {
         total_stations: stations.len(),
@@ -95,7 +98,8 @@ pub async fn get_sector_detail(
 
     // Map owner to name
     let owner_name = sector.owner.as_ref().map(|o| {
-        game.faction_names.get(o.as_str())
+        game.faction_names
+            .get(o.as_str())
             .map(|n| n.to_string())
             .unwrap_or_else(|| o.clone())
     });

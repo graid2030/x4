@@ -2,7 +2,6 @@ use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 
 use crate::models::SectorMapData;
-use crate::parsers::{extract_sector_map, load_save_file};
 use crate::services::GameDataCache;
 
 use super::common::AppState;
@@ -19,12 +18,21 @@ pub async fn get_last_paths() -> Result<Json<LastPathsResponse>, StatusCode> {
     match GameDataCache::load_from_file(cache_path) {
         Ok(cache) => {
             let resp = match cache.last_paths {
-                Some(lp) => LastPathsResponse { game_path: Some(lp.game_path), saves_dir: Some(lp.saves_dir) },
-                None => LastPathsResponse { game_path: None, saves_dir: None },
+                Some(lp) => LastPathsResponse {
+                    game_path: Some(lp.game_path),
+                    saves_dir: Some(lp.saves_dir),
+                },
+                None => LastPathsResponse {
+                    game_path: None,
+                    saves_dir: None,
+                },
             };
             Ok(Json(resp))
         }
-        Err(_) => Ok(Json(LastPathsResponse { game_path: None, saves_dir: None })),
+        Err(_) => Ok(Json(LastPathsResponse {
+            game_path: None,
+            saves_dir: None,
+        })),
     }
 }
 
@@ -73,13 +81,19 @@ pub async fn list_save_files(
                 if file_type.is_file() {
                     if let Some(filename) = entry.file_name().to_str() {
                         if filename.ends_with(".xml.gz") || filename.ends_with(".xml") {
-                            let (modified_str, modified_ts) = entry.metadata()
+                            let (modified_str, modified_ts) = entry
+                                .metadata()
                                 .ok()
                                 .and_then(|m| m.modified().ok())
                                 .and_then(|t| t.duration_since(SystemTime::UNIX_EPOCH).ok())
                                 .map(|d| {
-                                    let datetime = chrono::DateTime::<chrono::Utc>::from_timestamp(d.as_secs() as i64, 0);
-                                    let formatted = datetime.map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string()).unwrap_or_default();
+                                    let datetime = chrono::DateTime::<chrono::Utc>::from_timestamp(
+                                        d.as_secs() as i64,
+                                        0,
+                                    );
+                                    let formatted = datetime
+                                        .map(|dt| dt.format("%Y-%m-%d %H:%M:%S").to_string())
+                                        .unwrap_or_default();
                                     (Some(formatted), Some(d.as_secs()))
                                 })
                                 .unwrap_or((None, None));
@@ -97,13 +111,11 @@ pub async fn list_save_files(
     }
 
     // Sort by modification time (descending) to show newest saves first
-    saves.sort_by(|a, b| {
-        match (b.modified_timestamp, a.modified_timestamp) {
-            (Some(t1), Some(t2)) => t1.cmp(&t2),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => b.filename.cmp(&a.filename),
-        }
+    saves.sort_by(|a, b| match (b.modified_timestamp, a.modified_timestamp) {
+        (Some(t1), Some(t2)) => t1.cmp(&t2),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => b.filename.cmp(&a.filename),
     });
 
     Ok(Json(saves))
@@ -119,14 +131,17 @@ pub async fn get_sector_map(
     State(state): State<AppState>,
     Json(req): Json<SectorMapRequest>,
 ) -> Result<Json<SectorMapData>, StatusCode> {
-    eprintln!("[API] get_sector_map called with sector_code: '{}'", req.sector_code);
+    eprintln!(
+        "[API] get_sector_map called with sector_code: '{}'",
+        req.sector_code
+    );
 
     state.save_repository.ensure_latest().await?;
 
     let game_data = state.game_data.read().await;
     let save_data = state.save_data.read().await;
 
-    let (game, save) = match (game_data.as_ref(), save_data.as_ref()) {
+    let (_game, save) = match (game_data.as_ref(), save_data.as_ref()) {
         (Some(g), Some(s)) => (g, s),
         _ => return Err(StatusCode::BAD_REQUEST),
     };
@@ -141,22 +156,15 @@ pub async fn get_sector_map(
     let actual_code = &sector.code;
     let sector_owner = sector.owner.clone();
 
-    eprintln!("[API] Found sector: name='{}', code='{}', owner={:?}", sector.name, actual_code, sector_owner);
+    eprintln!(
+        "[API] Found sector: name='{}', code='{}', owner={:?}",
+        sector.name, actual_code, sector_owner
+    );
 
-    // Reload save file
-    let save_content = load_save_file(&save.save_path)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Extract sector map data
-    let map_data = extract_sector_map(
-        &save_content,
-        actual_code,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
-        sector_owner,
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let map_data = state
+        .save_repository
+        .get_sector_map(actual_code, sector_owner)
+        .await?;
 
     Ok(Json(map_data))
 }

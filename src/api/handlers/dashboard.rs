@@ -4,10 +4,7 @@ use crate::models::{
     DashboardPlayer, DashboardResponse, DashboardRoute, DashboardSector, DashboardStats,
     TradeFilters,
 };
-use crate::parsers::assets::{extract_player_assets, extract_player_npcs};
 use crate::parsers::game_xml::resolve_name;
-use crate::parsers::pilot_xml::extract_pilot_info;
-use crate::parsers::save_xml::load_save_file;
 use crate::services::ArbitrageService;
 
 use super::common::AppState;
@@ -29,38 +26,20 @@ pub async fn get_dashboard(
         }
     };
 
-    // Load save file
-    let save_content = load_save_file(&save.save_path).map_err(|e| {
-        eprintln!("Dashboard error loading save file: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let pilot_info = state
+        .save_repository
+        .get_pilot()
+        .await?
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Extract pilot info
-    let pilot_info = extract_pilot_info(&save_content, &game.localization).map_err(|e| {
-        eprintln!("Dashboard error extracting pilot info: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-
-    // Extract player assets for ship/station counts
-    let assets = extract_player_assets(
-        &save_content,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
-    )
-    .map_err(|e| {
-        eprintln!("Dashboard error extracting player assets: {}", e);
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
+    let assets = state.save_repository.get_player_assets().await?;
 
     // Count ships and stations
     let ships = assets.iter().filter(|a| a.class.contains("ship")).count();
     let stations = assets.iter().filter(|a| a.class == "station").count();
 
     // Extract NPCs count
-    let npcs = extract_player_npcs(&save_content, &game.localization)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
-        .len();
+    let npcs = state.save_repository.get_player_npcs().await?.len();
 
     // Build player info
     let player = DashboardPlayer {

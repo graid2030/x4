@@ -3,7 +3,10 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::RwLock;
 
-use crate::models::{PilotInfo, Sector, StationCount, StationSummary, StationWare};
+use crate::models::{
+    PilotInfo, PlayerAsset, PlayerNpc, Sector, SectorMapData, StationCount, StationInfo,
+    StationSummary, StationWare,
+};
 use crate::services::{GameDataCache, SaveDataRepository};
 
 #[derive(Clone)]
@@ -24,4 +27,9 @@ pub struct SaveData {
     pub station_counts: HashMap<String, StationCount>,
     pub stations: Vec<StationSummary>,
     pub station_lookup: HashMap<String, StationSummary>,
+    pub save_content: Option<Arc<String>>,
+    pub player_assets: Option<Vec<PlayerAsset>>,
+    pub player_npcs: Option<Vec<PlayerNpc>>,
+    pub sector_maps: HashMap<String, SectorMapData>,
+    pub stations_by_sector: HashMap<String, Vec<StationInfo>>,
 }

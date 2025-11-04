@@ -1,5 +1,6 @@
 mod helpers;
 mod sectors;
+mod station_positions;
 mod stations;
 mod trades;
 
@@ -10,6 +11,7 @@ use std::io::Read;
 use std::path::Path;
 
 pub use sectors::extract_sectors;
+pub use station_positions::extract_stations_for_sector;
 pub use stations::{extract_station_data, StationParseResult};
 pub use trades::extract_all_trades;
 

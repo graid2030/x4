@@ -7,4 +7,3 @@ pub mod sector_map;
 
 pub use cat_dat::*;
 pub use save_xml::*;
-pub use sector_map::*;

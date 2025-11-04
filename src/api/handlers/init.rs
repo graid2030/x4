@@ -1,12 +1,13 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::parsers::game_xml::resolve_name;
-use crate::parsers::{extract_sectors, find_cat_files, load_save_file, CatDatReader};
+use crate::parsers::{extract_sectors, load_save_file};
 use crate::services::{GameDataCache, SavedPaths};
 
 use super::common::{AppState, SaveData};
+use super::init_utils::{apply_sector_name_overrides, ensure_sector_name_coverage};
 
 #[derive(Deserialize)]
 pub struct InitRequest {
@@ -37,16 +38,7 @@ pub async fn init_handler(
     let mut game_data = GameDataCache::load_or_extract(&req.game_path, &cache_path, &req.lang_id)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    // Optional: override/augment sector name map with x4-names.json (macro -> clean name)
-    if let Ok(content) = std::fs::read_to_string("x4-names.json") {
-        if let Ok(json_map) =
-            serde_json::from_str::<std::collections::HashMap<String, String>>(&content)
-        {
-            for (k, v) in json_map {
-                game_data.sector_names.insert(k.to_lowercase(), v);
-            }
-        }
-    }
+    apply_sector_name_overrides(&mut game_data);
 
     // Build full save file path
     let save_path = format!("{}\\{}", req.saves_dir, req.selected_save);
@@ -74,94 +66,13 @@ pub async fn init_handler(
         sample_keys
     );
 
-    // Quick scan: collect sector macros from save and ensure name maps cover them; if not, force re-extract
-    let macros_in_save = collect_sector_macros(&save_content);
-    let missing_macros: Vec<String> = macros_in_save
-        .iter()
-        .filter(|m| {
-            !game_data.sector_names.contains_key(*m) && !game_data.component_names.contains_key(*m)
-        })
-        .take(5)
-        .cloned()
-        .collect();
-    let missing_count = macros_in_save
-        .iter()
-        .filter(|m| {
-            !game_data.sector_names.contains_key(*m) && !game_data.component_names.contains_key(*m)
-        })
-        .count();
-    if missing_count > 0 {
-        eprintln!(
-            "DIAG REEXTRACT: missing {} macro names from game data (sample: {:?}) — forcing re-extract",
-            missing_count,
-            missing_macros
-        );
-        game_data = GameDataCache::extract_from_game(&req.game_path, &req.lang_id)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-        // Re-apply optional override
-        if let Ok(content) = std::fs::read_to_string("x4-names.json") {
-            if let Ok(json_map) =
-                serde_json::from_str::<std::collections::HashMap<String, String>>(&content)
-            {
-                for (k, v) in json_map {
-                    game_data.sector_names.insert(k.to_lowercase(), v);
-                }
-            }
-        }
-        // Save refreshed cache
-        let _ = game_data.save_to_file(&cache_path);
-
-        // Recompute missing after re-extract
-        let missing_after: Vec<String> = macros_in_save
-            .iter()
-            .filter(|m| {
-                !game_data.sector_names.contains_key(*m)
-                    && !game_data.component_names.contains_key(*m)
-            })
-            .cloned()
-            .collect();
-        if !missing_after.is_empty() {
-            // Last-resort textual scan in CAT XMLs for those specific macros
-            let patterns: Vec<String> = (1..=20).map(|n| format!("{:02}.cat", n)).collect();
-            let pattern_refs: Vec<&str> = patterns.iter().map(|s| s.as_str()).collect();
-            let mut all_files = find_cat_files(&req.game_path, &pattern_refs)
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            all_files.sort();
-            all_files.dedup();
-            let mut all_xml = Vec::new();
-            for cat_file in &all_files {
-                let reader =
-                    CatDatReader::new(cat_file).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-                if let Ok(entries) = reader.extract_xml_files() {
-                    all_xml.extend(entries);
-                }
-            }
-
-            let mut filled = 0usize;
-            let _missing_set: std::collections::HashSet<String> =
-                missing_after.iter().cloned().collect();
-            let re_tpl_start = r#"(?s)<dataset[^>]*\bmacro\s*=\s*"#;
-            let re_tpl_mid = r#""[^>]*>.*?<identification[^>]*\bname\s*=\s*"([^"]+)""#;
-            for m in &missing_after {
-                let pat = format!("{}{}{}", re_tpl_start, regex::escape(m), re_tpl_mid);
-                let re = regex::Regex::new(&pat).unwrap();
-                let mut found: Option<String> = None;
-                for entry in &all_xml {
-                    if let Some(cap) = re.captures(&entry.content) {
-                        let raw = cap.get(1).map(|g| g.as_str()).unwrap_or("");
-                        let resolved = resolve_name(raw, &game_data.localization);
-                        found = Some(resolved);
-                        break;
-                    }
-                }
-                if let Some(name) = found {
-                    game_data.sector_names.insert(m.clone(), name);
-                    filled += 1;
-                }
-            }
-            eprintln!("DIAG TEXTSCAN: filled {} missing macro names", filled);
-        }
-    }
+    ensure_sector_name_coverage(
+        &mut game_data,
+        &req.game_path,
+        &req.lang_id,
+        &save_content,
+        &cache_path,
+    )?;
 
     let sectors = extract_sectors(
         &save_content,
@@ -187,6 +98,8 @@ pub async fn init_handler(
 
     // Store in state
     *state.game_data.write().await = Some(game_data);
+    let save_content_arc = Arc::new(save_content);
+
     *state.save_data.write().await = Some(SaveData {
         sectors,
         save_path,
@@ -197,52 +110,21 @@ pub async fn init_handler(
         station_counts: HashMap::new(),
         stations: Vec::new(),
         station_lookup: HashMap::new(),
+        save_content: Some(save_content_arc),
+        player_assets: None,
+        player_npcs: None,
+        sector_maps: HashMap::new(),
+        stations_by_sector: HashMap::new(),
     });
 
-    state.save_repository.ensure_latest().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    state
+        .save_repository
+        .ensure_latest()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(InitResponse {
         success: true,
         message: "Initialized successfully".to_string(),
     }))
-}
-
-fn collect_sector_macros(xml: &str) -> std::collections::HashSet<String> {
-    use quick_xml::{events::Event, Reader};
-    let mut reader = Reader::from_str(xml);
-    reader.trim_text(true);
-    let mut buf = Vec::new();
-    let mut set = std::collections::HashSet::new();
-    loop {
-        match reader.read_event_into(&mut buf) {
-            Ok(Event::Start(ref e)) | Ok(Event::Empty(ref e)) => {
-                if e.name().as_ref() == b"component" {
-                    let mut is_sector = false;
-                    let mut macro_name: Option<String> = None;
-                    for attr in e.attributes() {
-                        if let Ok(attr) = attr {
-                            match attr.key.as_ref() {
-                                b"class" if attr.value.as_ref() == b"sector" => is_sector = true,
-                                b"macro" => {
-                                    macro_name =
-                                        Some(String::from_utf8_lossy(&attr.value).to_string())
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-                    if is_sector {
-                        if let Some(m) = macro_name {
-                            set.insert(m.to_lowercase());
-                        }
-                    }
-                }
-            }
-            Ok(Event::Eof) => break,
-            Err(_) => break,
-            _ => {}
-        }
-        buf.clear();
-    }
-    set
 }
