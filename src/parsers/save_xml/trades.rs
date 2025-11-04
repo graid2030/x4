@@ -43,10 +43,26 @@ pub fn extract_all_trades(
                     }
                 }
 
+                // Handle source element - update parent component's source info
+                if tag == "source" && !stack.is_empty() {
+                    let entry = attrs.get("entry").cloned();
+                    let nameindex = attrs.get("nameindex").and_then(|s| s.parse().ok());
+
+                    // Update the parent component (station) with source info
+                    if let Some(last) = stack.last_mut() {
+                        if last.tag == "component" {
+                            last.source_entry = entry;
+                            last.source_nameindex = nameindex;
+                        }
+                    }
+                }
+
                 stack.push(Context {
                     tag: tag.clone(),
                     attrs: attrs.clone(),
                     depth,
+                    source_entry: None,
+                    source_nameindex: None,
                 });
 
                 // Process trade elements - ONLY if they're inside a station
@@ -65,6 +81,20 @@ pub fn extract_all_trades(
                         let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
                         let value = String::from_utf8_lossy(&attr.value).to_string();
                         attrs.insert(key, value);
+                    }
+                }
+
+                // Handle self-closing source element
+                if tag == "source" && !stack.is_empty() {
+                    let entry = attrs.get("entry").cloned();
+                    let nameindex = attrs.get("nameindex").and_then(|s| s.parse().ok());
+
+                    // Update the parent component (station) with source info
+                    if let Some(last) = stack.last_mut() {
+                        if last.tag == "component" {
+                            last.source_entry = entry;
+                            last.source_nameindex = nameindex;
+                        }
                     }
                 }
 

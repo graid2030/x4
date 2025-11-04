@@ -60,7 +60,7 @@ function Navigation() {
             <div className="player-details">
               <span className="player-name">{pilot.name}</span>
               <span className="player-credits">
-                {formatCredits(pilot.money)} Cr
+                {formatCredits(pilot.credits)} Cr
               </span>
             </div>
             {pilot.location && (
