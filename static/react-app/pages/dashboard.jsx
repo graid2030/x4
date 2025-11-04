@@ -153,12 +153,13 @@ function DashboardPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <div style={{ fontWeight: '600', fontSize: '14px' }}>{route.ware_name}</div>
                     <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                      <span style={{ color: '#10b981' }}>Buy:</span> {route.buy_station} ({route.buy_sector})
-                      {' → '}
-                      <span style={{ color: '#3b82f6' }}>Sell:</span> {route.sell_station} ({route.sell_sector})
+                      <span style={{ color: '#10b981' }}>Buy from:</span> {route.buy_sector} → {route.buy_station}
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                      <span style={{ color: '#3b82f6' }}>Sell to:</span> {route.sell_sector} → {route.sell_station}
                     </div>
                     <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
-                      {route.amount.toLocaleString()} units @ {route.buy_price} Cr → {route.sell_price} Cr
+                      {route.amount.toLocaleString()} units • {route.buy_price.toFixed(2)} Cr → {route.sell_price.toFixed(2)} Cr
                     </div>
                   </div>
 

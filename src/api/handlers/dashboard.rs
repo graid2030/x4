@@ -93,7 +93,7 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
         ship_id: None,
         cargo_volume: Some(5000.0),
         same_sector_only: false,
-        group_by_ware: false,
+        group_by_ware: true, // Only show best route per ware
     };
 
     let mut offers = ArbitrageService::calculate_arbitrage(&all_trades, &game.wares, &filters);
@@ -116,17 +116,23 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
     let top_routes: Vec<DashboardRoute> = offers
         .into_iter()
         .take(5)
-        .map(|offer| DashboardRoute {
-            ware: offer.ware.clone(),
-            ware_name: offer.ware_name.clone().unwrap_or_else(|| offer.ware.clone()),
-            buy_station: offer.buy_station.clone(),
-            buy_sector: offer.buy_sector.clone(),
-            sell_station: offer.sell_station.clone(),
-            sell_sector: offer.sell_sector.clone(),
-            profit: offer.total_profit,
-            buy_price: offer.buy_price,
-            sell_price: offer.sell_price,
-            amount: offer.qty,
+        .map(|offer| {
+            // Debug logging to diagnose naming issues
+            eprintln!("[Dashboard] Route: {} | Buy: station='{}' sector='{}' | Sell: station='{}' sector='{}'",
+                offer.ware, offer.buy_station, offer.buy_sector, offer.sell_station, offer.sell_sector);
+
+            DashboardRoute {
+                ware: offer.ware.clone(),
+                ware_name: offer.ware_name.clone().unwrap_or_else(|| offer.ware.clone()),
+                buy_station: offer.buy_station.clone(),
+                buy_sector: offer.buy_sector.clone(),
+                sell_station: offer.sell_station.clone(),
+                sell_sector: offer.sell_sector.clone(),
+                profit: offer.total_profit,
+                buy_price: offer.buy_price,
+                sell_price: offer.sell_price,
+                amount: offer.qty,
+            }
         })
         .collect();
 
