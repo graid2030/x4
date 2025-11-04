@@ -16,6 +16,8 @@ use super::common::AppState;
 pub async fn get_dashboard(
     State(state): State<AppState>,
 ) -> Result<Json<DashboardResponse>, StatusCode> {
+    state.save_repository.ensure_latest().await?;
+
     let game_data = state.game_data.read().await;
     let save_data = state.save_data.read().await;
 

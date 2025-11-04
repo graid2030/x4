@@ -5,8 +5,8 @@ use axum::{extract::{Path, State}, http::StatusCode, Json};
 use std::collections::HashSet;
 
 use crate::api::handlers::AppState;
-use crate::models::{SectorDetailResponse, TradeOfferDetail, SectorDetailStats, TradeType};
-use crate::parsers::{load_save_file, save_xml::extract_all_trades};
+use crate::models::{SectorDetailResponse, SectorDetailStats, TradeOfferDetail, TradeType};
+use crate::parsers::load_save_file;
 use station_parser::extract_stations_for_sector;
 
 /// Get detailed information about a specific sector
@@ -14,6 +14,8 @@ pub async fn get_sector_detail(
     State(state): State<AppState>,
     Path(sector_code): Path<String>,
 ) -> Result<Json<SectorDetailResponse>, StatusCode> {
+    state.save_repository.ensure_latest().await?;
+
     let game_data = state.game_data.read().await;
     let save_data = state.save_data.read().await;
 
@@ -34,50 +36,50 @@ pub async fn get_sector_detail(
     // Extract stations for this sector
     let stations = extract_stations_for_sector(&save_content, &sector_code, &game.component_names, &game.faction_names)?;
 
-    // Extract all trades and filter by sector
-    let all_trades = extract_all_trades(
-        &save_content,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
-        &save.sectors,
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Use cached trades for this sector
+    let filter = [sector_code.clone()];
+    let mut sector_trades = state.save_repository.get_trades(Some(&filter)).await?;
+    let sector_trades = sector_trades.remove(&sector_code).unwrap_or_default();
 
-    // Get trade offers for this sector
     let mut trade_offers = Vec::new();
     let mut buy_count = 0;
     let mut sell_count = 0;
     let mut unique_wares = HashSet::new();
 
-    if let Some(sector_trades) = all_trades.get(&sector_code) {
-        for trade in sector_trades {
-            let trade_type_str = match trade.trade_type {
-                TradeType::Buy => { buy_count += 1; "buy" },
-                TradeType::Sell => { sell_count += 1; "sell" },
-            };
+    for trade in sector_trades {
+        let trade_type_str = match trade.trade_type {
+            TradeType::Buy => {
+                buy_count += 1;
+                "buy"
+            }
+            TradeType::Sell => {
+                sell_count += 1;
+                "sell"
+            }
+        };
 
-            unique_wares.insert(trade.ware.clone());
+        unique_wares.insert(trade.ware.clone());
 
-            // Resolve ware name from game metadata via localization
-            let ware_name = game.wares.get(&trade.ware)
-                .and_then(|w| w.name_ref.as_ref())
-                .map(|name_ref| {
-                    use crate::parsers::game_xml::resolve_name;
-                    resolve_name(name_ref, &game.localization)
-                })
-                .unwrap_or_else(|| trade.ware.clone());
+        // Resolve ware name from game metadata via localization
+        let ware_name = game
+            .wares
+            .get(&trade.ware)
+            .and_then(|w| w.name_ref.as_ref())
+            .map(|name_ref| {
+                use crate::parsers::game_xml::resolve_name;
+                resolve_name(name_ref, &game.localization)
+            })
+            .unwrap_or_else(|| trade.ware.clone());
 
-            trade_offers.push(TradeOfferDetail {
-                ware_id: trade.ware.clone(),
-                ware_name,
-                trade_type: trade_type_str.to_string(),
-                price: trade.price,
-                amount: trade.amount,
-                station_code: trade.station_code.clone(),
-                station_name: trade.station_name.clone(),
-            });
-        }
+        trade_offers.push(TradeOfferDetail {
+            ware_id: trade.ware.clone(),
+            ware_name,
+            trade_type: trade_type_str.to_string(),
+            price: trade.price,
+            amount: trade.amount,
+            station_code: trade.station_code.clone(),
+            station_name: trade.station_name.clone(),
+        });
     }
 
     // Calculate stats

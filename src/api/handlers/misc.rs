@@ -121,6 +121,8 @@ pub async fn get_sector_map(
 ) -> Result<Json<SectorMapData>, StatusCode> {
     eprintln!("[API] get_sector_map called with sector_code: '{}'", req.sector_code);
 
+    state.save_repository.ensure_latest().await?;
+
     let game_data = state.game_data.read().await;
     let save_data = state.save_data.read().await;
 

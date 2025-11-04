@@ -12,6 +12,8 @@ pub async fn get_trade_offers(
     State(state): State<AppState>,
     Json(filters): Json<TradeFilters>,
 ) -> Result<Json<Vec<TradeOffer>>, StatusCode> {
+    state.save_repository.ensure_latest().await?;
+
     let game_data = state.game_data.read().await;
     let save_data = state.save_data.read().await;
 
@@ -60,6 +62,8 @@ pub async fn get_ware_trades(
     State(state): State<AppState>,
     Json(req): Json<WareTradesRequest>,
 ) -> Result<Json<Vec<TradeOffer>>, StatusCode> {
+    state.save_repository.ensure_latest().await?;
+
     let game_data = state.game_data.read().await;
     let save_data = state.save_data.read().await;
 

@@ -6,6 +6,8 @@ use super::common::AppState;
 
 /// Get available sectors
 pub async fn get_sectors(State(state): State<AppState>) -> Result<Json<Vec<Sector>>, StatusCode> {
+    state.save_repository.ensure_latest().await?;
+
     let save_data = state.save_data.read().await;
     match save_data.as_ref() {
         Some(data) => Ok(Json(data.sectors.clone())),
@@ -17,6 +19,8 @@ pub async fn get_sectors(State(state): State<AppState>) -> Result<Json<Vec<Secto
 pub async fn get_sectors_list(
     State(state): State<AppState>,
 ) -> Result<Json<SectorsListResponse>, StatusCode> {
+    state.save_repository.ensure_latest().await?;
+
     let game_data = state.game_data.read().await;
     let save_data = state.save_data.read().await;
 
