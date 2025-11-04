@@ -1,6 +1,7 @@
 mod helpers;
-mod trades;
 mod sectors;
+mod stations;
+mod trades;
 
 use anyhow::Result;
 use flate2::read::GzDecoder;
@@ -8,8 +9,9 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-pub use trades::extract_all_trades;
 pub use sectors::extract_sectors;
+pub use stations::{extract_station_data, StationParseResult};
+pub use trades::extract_all_trades;
 
 /// Load save file (supports both .xml and .xml.gz)
 pub fn load_save_file<P: AsRef<Path>>(path: P) -> Result<String> {

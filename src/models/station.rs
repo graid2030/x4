@@ -11,6 +11,18 @@ pub struct Station {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StationSummary {
+    pub code: String,
+    pub name: String,
+    pub macro_name: String,
+    pub sector_code: String,
+    pub owner: Option<String>,
+    pub owner_name: Option<String>,
+}
+
+pub type StationCount = (usize, usize);
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum TradeType {
     Buy,

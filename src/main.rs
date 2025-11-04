@@ -5,14 +5,23 @@ mod services;
 mod api;
 
 use api::{create_router, AppState};
+use services::SaveDataRepository;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 #[tokio::main]
 async fn main() {
+    let game_data = Arc::new(RwLock::new(None));
+    let save_data = Arc::new(RwLock::new(None));
+    let save_repository = Arc::new(SaveDataRepository::new(
+        game_data.clone(),
+        save_data.clone(),
+    ));
+
     let state = AppState {
-        game_data: Arc::new(RwLock::new(None)),
-        save_data: Arc::new(RwLock::new(None)),
+        game_data,
+        save_data,
+        save_repository,
     };
 
     let app = create_router(state);
