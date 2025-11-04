@@ -1,12 +1,17 @@
 // Trade Routes Page - Enhanced with filter presets and CSV export (<= 200 lines)
 
 const { Layout, PageContainer, Filters, Results } = window.Components;
-const { useState } = React;
+const { useState, useMemo } = React;
 
 function TradeRoutesPage() {
   const [offers, setOffers] = useState([]);
   const [lastFilters, setLastFilters] = useState(null);
   const [showPresets, setShowPresets] = useState(false);
+  const [showOnlyFavorites, setShowOnlyFavorites] = useState(false);
+  const [favorites, setFavorites] = useState(() => {
+    const stored = localStorage.getItem('trade_route_favorites');
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  });
 
   async function handleSearch(filters) {
     setLastFilters(filters);
@@ -14,6 +19,25 @@ function TradeRoutesPage() {
     setOffers(data);
     return data;
   }
+
+  // Favorites: unique key per route
+  function getFavoriteKey(offer) {
+    return `${offer.ware}|${offer.buy_station_code}|${offer.sell_station_code}`;
+  }
+
+  function toggleFavorite(offer) {
+    const key = getFavoriteKey(offer);
+    const newFavorites = new Set(favorites);
+    newFavorites.has(key) ? newFavorites.delete(key) : newFavorites.add(key);
+    setFavorites(newFavorites);
+    localStorage.setItem('trade_route_favorites', JSON.stringify(Array.from(newFavorites)));
+  }
+
+  // Filter by favorites
+  const displayOffers = useMemo(() => {
+    if (!showOnlyFavorites) return offers;
+    return offers.filter(offer => favorites.has(getFavoriteKey(offer)));
+  }, [offers, showOnlyFavorites, favorites]);
 
   // Filter presets - saved in localStorage
   function getPresets() {
@@ -132,9 +156,16 @@ function TradeRoutesPage() {
     <Layout>
       <PageContainer
         title="Trade Routes"
-        subtitle="Find profitable arbitrage opportunities"
+        subtitle={`${displayOffers.length} route${displayOffers.length !== 1 ? 's' : ''} found${showOnlyFavorites ? ' (favorites only)' : ''}`}
         actions={
           <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              className={showOnlyFavorites ? "btn-primary" : "btn-secondary"}
+              onClick={() => setShowOnlyFavorites(!showOnlyFavorites)}
+              disabled={offers.length === 0}
+            >
+              ⭐ Favorites ({favorites.size})
+            </button>
             <button className="btn-secondary" onClick={exportToCSV} disabled={offers.length === 0}>
               📥 Export CSV
             </button>
@@ -197,7 +228,13 @@ function TradeRoutesPage() {
         )}
 
         <Filters onSearch={handleSearch} />
-        <Results data={offers} filters={lastFilters} />
+        <Results
+          data={displayOffers}
+          filters={lastFilters}
+          favorites={favorites}
+          onToggleFavorite={toggleFavorite}
+          getFavoriteKey={getFavoriteKey}
+        />
       </PageContainer>
     </Layout>
   );
