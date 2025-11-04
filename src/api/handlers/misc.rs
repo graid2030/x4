@@ -149,9 +149,9 @@ pub async fn get_sector_map(
     let map_data = extract_sector_map(
         &save_content,
         actual_code,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
+        game.sector_names_map(),
+        game.component_names_map(),
+        game.localization_map(),
         sector_owner,
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

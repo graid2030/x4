@@ -3,7 +3,6 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 use crate::models::{TradeFilters, TradeOffer, StationWare};
-use crate::parsers::game_xml::resolve_name;
 use crate::parsers::save_xml::{extract_all_trades, load_save_file};
 use crate::services::ArbitrageService;
 
@@ -29,9 +28,9 @@ pub async fn get_trade_offers(
     // Extract all trades by sector
     let all_trades = extract_all_trades(
         &save_content,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
+        game.sector_names_map(),
+        game.component_names_map(),
+        game.localization_map(),
         &save.sectors,
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -47,7 +46,7 @@ pub async fn get_trade_offers(
     };
 
     // Calculate arbitrage
-    let mut offers = ArbitrageService::calculate_arbitrage(&filtered_trades, &game.wares, &filters);
+    let mut offers = ArbitrageService::calculate_arbitrage(&filtered_trades, game.wares(), &filters);
 
     // Filter by selected wares
     if let Some(selected_wares) = &filters.wares {
@@ -56,15 +55,7 @@ pub async fn get_trade_offers(
 
     // Populate human-readable ware names
     for offer in &mut offers {
-        if let Some(meta) = game.wares.get(&offer.ware) {
-            if let Some(name_ref) = &meta.name_ref {
-                offer.ware_name = Some(resolve_name(name_ref, &game.localization));
-            } else {
-                offer.ware_name = Some(offer.ware.clone());
-            }
-        } else {
-            offer.ware_name = Some(offer.ware.clone());
-        }
+        offer.ware_name = Some(game.get_ware_display_name(&offer.ware));
     }
 
     Ok(Json(offers))
@@ -98,9 +89,9 @@ pub async fn get_ware_trades(
     // Extract all trades by sector
     let all_trades = extract_all_trades(
         &save_content,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
+        game.sector_names_map(),
+        game.component_names_map(),
+        game.localization_map(),
         &save.sectors,
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -125,22 +116,14 @@ pub async fn get_ware_trades(
         same_sector_only: req.same_sector_only,
     };
 
-    let mut offers = ArbitrageService::calculate_arbitrage(&filtered_trades, &game.wares, &filters);
+    let mut offers = ArbitrageService::calculate_arbitrage(&filtered_trades, game.wares(), &filters);
 
     // Filter by the specific ware
     offers.retain(|offer| offer.ware == req.ware_id);
 
     // Populate human-readable ware names
     for offer in &mut offers {
-        if let Some(meta) = game.wares.get(&offer.ware) {
-            if let Some(name_ref) = &meta.name_ref {
-                offer.ware_name = Some(resolve_name(name_ref, &game.localization));
-            } else {
-                offer.ware_name = Some(offer.ware.clone());
-            }
-        } else {
-            offer.ware_name = Some(offer.ware.clone());
-        }
+        offer.ware_name = Some(game.get_ware_display_name(&offer.ware));
     }
 
     Ok(Json(offers))

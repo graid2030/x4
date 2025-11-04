@@ -4,7 +4,6 @@ use crate::models::{
     DashboardResponse, DashboardPlayer, DashboardStats, DashboardRoute, DashboardSector,
     TradeFilters,
 };
-use crate::parsers::game_xml::resolve_name;
 use crate::parsers::save_xml::{extract_all_trades, load_save_file};
 use crate::parsers::pilot_xml::extract_pilot_info;
 use crate::parsers::assets::{extract_player_assets, extract_player_npcs};
@@ -34,7 +33,7 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
         })?;
 
     // Extract pilot info
-    let pilot_info = extract_pilot_info(&save_content, &game.localization)
+    let pilot_info = extract_pilot_info(&save_content, game.localization_map())
         .map_err(|e| {
             eprintln!("Dashboard error extracting pilot info: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -43,9 +42,9 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
     // Extract player assets for ship/station counts
     let assets = extract_player_assets(
         &save_content,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
+        game.sector_names_map(),
+        game.component_names_map(),
+        game.localization_map(),
     )
     .map_err(|e| {
         eprintln!("Dashboard error extracting player assets: {}", e);
@@ -57,7 +56,7 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
     let stations = assets.iter().filter(|a| a.class == "station").count();
 
     // Extract NPCs count
-    let npcs = extract_player_npcs(&save_content, &game.localization)
+    let npcs = extract_player_npcs(&save_content, game.localization_map())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .len();
 
@@ -80,9 +79,9 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
     // Calculate top 5 trade routes
     let all_trades = extract_all_trades(
         &save_content,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
+        game.sector_names_map(),
+        game.component_names_map(),
+        game.localization_map(),
         &save.sectors,
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -96,19 +95,11 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
         group_by_ware: true, // Only show best route per ware
     };
 
-    let mut offers = ArbitrageService::calculate_arbitrage(&all_trades, &game.wares, &filters);
+    let mut offers = ArbitrageService::calculate_arbitrage(&all_trades, game.wares(), &filters);
 
     // Populate ware names
     for offer in &mut offers {
-        if let Some(meta) = game.wares.get(&offer.ware) {
-            if let Some(name_ref) = &meta.name_ref {
-                offer.ware_name = Some(resolve_name(name_ref, &game.localization));
-            } else {
-                offer.ware_name = Some(offer.ware.clone());
-            }
-        } else {
-            offer.ware_name = Some(offer.ware.clone());
-        }
+        offer.ware_name = Some(game.get_ware_display_name(&offer.ware));
     }
 
     // Sort by profit desc and take top 5
@@ -141,12 +132,7 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
                 .copied()
                 .unwrap_or((0, 0));
 
-            let owner_name = s.owner.as_ref().map(|o| {
-                game.faction_names
-                    .get(o.as_str())
-                    .map(|n| n.to_string())
-                    .unwrap_or_else(|| o.clone())
-            });
+            let owner_name = s.owner.as_ref().map(|o| game.get_faction_display_name(o));
 
             DashboardSector {
                 code: s.code.clone(),

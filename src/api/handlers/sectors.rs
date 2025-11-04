@@ -34,18 +34,15 @@ pub async fn get_sectors_list(
     // Extract all trades to count offers
     let all_trades = extract_all_trades(
         &save_content,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
+        game.sector_names_map(),
+        game.component_names_map(),
+        game.localization_map(),
         &save.sectors,
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Count stations per sector
     let station_counts = count_stations_per_sector(&save_content)?;
-
-    // Use faction names from game data (extracted from libraries/factions.xml)
-    let faction_names = &game.faction_names;
 
     // Build sector list items
     let mut sectors_list: Vec<SectorListItem> = Vec::new();
@@ -86,11 +83,10 @@ pub async fn get_sectors_list(
         }
 
         // Map owner to name (fallback to raw owner ID if not in map)
-        let owner_name = sector.owner.as_ref().map(|o| {
-            faction_names.get(o.as_str())
-                .map(|n| n.to_string())
-                .unwrap_or_else(|| o.clone())
-        });
+        let owner_name = sector
+            .owner
+            .as_ref()
+            .map(|o| game.get_faction_display_name(o));
 
         sectors_list.push(SectorListItem {
             code: sector.code.clone(),
