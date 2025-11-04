@@ -1,0 +1,8 @@
+/.claude
+/.idea
+/target
+*.json
+!Cargo.json
+x4-*.json
+*.xml
+*.xml.gz

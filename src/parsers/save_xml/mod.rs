@@ -1,0 +1,29 @@
+mod helpers;
+mod trades;
+mod sectors;
+
+use anyhow::Result;
+use flate2::read::GzDecoder;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
+
+pub use helpers::{Context, find_parent_sector, find_parent_station, get_station_name, get_sector_name};
+pub use trades::extract_all_trades;
+pub use sectors::extract_sectors;
+
+/// Load save file (supports both .xml and .xml.gz)
+pub fn load_save_file<P: AsRef<Path>>(path: P) -> Result<String> {
+    let path = path.as_ref();
+    let mut file = File::open(path)?;
+    let mut content = String::new();
+
+    if path.to_string_lossy().ends_with(".gz") {
+        let mut decoder = GzDecoder::new(file);
+        decoder.read_to_string(&mut content)?;
+    } else {
+        file.read_to_string(&mut content)?;
+    }
+
+    Ok(content)
+}
