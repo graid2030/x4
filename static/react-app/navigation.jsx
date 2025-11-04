@@ -15,7 +15,7 @@ function Navigation() {
 
   async function loadPilotInfo() {
     try {
-      const pilotData = await window.API.pilot();
+      const pilotData = await window.API.loadPilot();
       setPilot(pilotData);
     } catch (err) {
       console.error('Failed to load pilot:', err);
