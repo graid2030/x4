@@ -1,10 +1,8 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Deserialize;
-use std::collections::HashMap;
 
-use crate::models::{TradeFilters, TradeOffer, StationWare};
+use crate::models::{TradeFilters, TradeOffer};
 use crate::parsers::game_xml::resolve_name;
-use crate::parsers::save_xml::{extract_all_trades, load_save_file};
 use crate::services::ArbitrageService;
 
 use super::common::AppState;
@@ -17,34 +15,13 @@ pub async fn get_trade_offers(
     let game_data = state.game_data.read().await;
     let save_data = state.save_data.read().await;
 
-    let (game, save) = match (game_data.as_ref(), save_data.as_ref()) {
+    let (game, _save) = match (game_data.as_ref(), save_data.as_ref()) {
         (Some(g), Some(s)) => (g, s),
         _ => return Err(StatusCode::BAD_REQUEST),
     };
 
-    // Reload save file
-    let save_content = load_save_file(&save.save_path)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Extract all trades by sector
-    let all_trades = extract_all_trades(
-        &save_content,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
-        &save.sectors,
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Filter by selected sectors
-    let filtered_trades: HashMap<String, Vec<StationWare>> = if let Some(selected_sectors) = &filters.sectors {
-        all_trades
-            .into_iter()
-            .filter(|(code, _)| selected_sectors.contains(code))
-            .collect()
-    } else {
-        all_trades
-    };
+    let sector_filter = filters.sectors.as_ref().map(|s| s.as_slice());
+    let filtered_trades = state.save_repository.get_trades(sector_filter).await?;
 
     // Calculate arbitrage
     let mut offers = ArbitrageService::calculate_arbitrage(&filtered_trades, &game.wares, &filters);
@@ -86,34 +63,13 @@ pub async fn get_ware_trades(
     let game_data = state.game_data.read().await;
     let save_data = state.save_data.read().await;
 
-    let (game, save) = match (game_data.as_ref(), save_data.as_ref()) {
+    let (game, _save) = match (game_data.as_ref(), save_data.as_ref()) {
         (Some(g), Some(s)) => (g, s),
         _ => return Err(StatusCode::BAD_REQUEST),
     };
 
-    // Reload save file
-    let save_content = load_save_file(&save.save_path)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Extract all trades by sector
-    let all_trades = extract_all_trades(
-        &save_content,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
-        &save.sectors,
-    )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Filter by selected sectors
-    let filtered_trades: HashMap<String, Vec<StationWare>> = if let Some(selected_sectors) = &req.sectors {
-        all_trades
-            .into_iter()
-            .filter(|(code, _)| selected_sectors.contains(code))
-            .collect()
-    } else {
-        all_trades
-    };
+    let sector_filter = req.sectors.as_ref().map(|s| s.as_slice());
+    let filtered_trades = state.save_repository.get_trades(sector_filter).await?;
 
     // Calculate arbitrage with group_by_ware=false to get all trades
     let filters = TradeFilters {

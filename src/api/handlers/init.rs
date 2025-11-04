@@ -1,8 +1,9 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::parsers::game_xml::resolve_name;
-use crate::parsers::{extract_sectors, load_save_file, find_cat_files, CatDatReader};
+use crate::parsers::{extract_sectors, find_cat_files, load_save_file, CatDatReader};
 use crate::services::{GameDataCache, SavedPaths};
 
 use super::common::{AppState, SaveData};
@@ -38,7 +39,9 @@ pub async fn init_handler(
 
     // Optional: override/augment sector name map with x4-names.json (macro -> clean name)
     if let Ok(content) = std::fs::read_to_string("x4-names.json") {
-        if let Ok(json_map) = serde_json::from_str::<std::collections::HashMap<String, String>>(&content) {
+        if let Ok(json_map) =
+            serde_json::from_str::<std::collections::HashMap<String, String>>(&content)
+        {
             for (k, v) in json_map {
                 game_data.sector_names.insert(k.to_lowercase(), v);
             }
@@ -75,13 +78,17 @@ pub async fn init_handler(
     let macros_in_save = collect_sector_macros(&save_content);
     let missing_macros: Vec<String> = macros_in_save
         .iter()
-        .filter(|m| !game_data.sector_names.contains_key(*m) && !game_data.component_names.contains_key(*m))
+        .filter(|m| {
+            !game_data.sector_names.contains_key(*m) && !game_data.component_names.contains_key(*m)
+        })
         .take(5)
         .cloned()
         .collect();
     let missing_count = macros_in_save
         .iter()
-        .filter(|m| !game_data.sector_names.contains_key(*m) && !game_data.component_names.contains_key(*m))
+        .filter(|m| {
+            !game_data.sector_names.contains_key(*m) && !game_data.component_names.contains_key(*m)
+        })
         .count();
     if missing_count > 0 {
         eprintln!(
@@ -93,8 +100,12 @@ pub async fn init_handler(
             .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
         // Re-apply optional override
         if let Ok(content) = std::fs::read_to_string("x4-names.json") {
-            if let Ok(json_map) = serde_json::from_str::<std::collections::HashMap<String, String>>(&content) {
-                for (k, v) in json_map { game_data.sector_names.insert(k.to_lowercase(), v); }
+            if let Ok(json_map) =
+                serde_json::from_str::<std::collections::HashMap<String, String>>(&content)
+            {
+                for (k, v) in json_map {
+                    game_data.sector_names.insert(k.to_lowercase(), v);
+                }
             }
         }
         // Save refreshed cache
@@ -103,7 +114,10 @@ pub async fn init_handler(
         // Recompute missing after re-extract
         let missing_after: Vec<String> = macros_in_save
             .iter()
-            .filter(|m| !game_data.sector_names.contains_key(*m) && !game_data.component_names.contains_key(*m))
+            .filter(|m| {
+                !game_data.sector_names.contains_key(*m)
+                    && !game_data.component_names.contains_key(*m)
+            })
             .cloned()
             .collect();
         if !missing_after.is_empty() {
@@ -112,16 +126,20 @@ pub async fn init_handler(
             let pattern_refs: Vec<&str> = patterns.iter().map(|s| s.as_str()).collect();
             let mut all_files = find_cat_files(&req.game_path, &pattern_refs)
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            all_files.sort(); all_files.dedup();
+            all_files.sort();
+            all_files.dedup();
             let mut all_xml = Vec::new();
             for cat_file in &all_files {
-                let reader = CatDatReader::new(cat_file)
-                    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-                if let Ok(entries) = reader.extract_xml_files() { all_xml.extend(entries); }
+                let reader =
+                    CatDatReader::new(cat_file).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+                if let Ok(entries) = reader.extract_xml_files() {
+                    all_xml.extend(entries);
+                }
             }
 
             let mut filled = 0usize;
-            let _missing_set: std::collections::HashSet<String> = missing_after.iter().cloned().collect();
+            let _missing_set: std::collections::HashSet<String> =
+                missing_after.iter().cloned().collect();
             let re_tpl_start = r#"(?s)<dataset[^>]*\bmacro\s*=\s*"#;
             let re_tpl_mid = r#""[^>]*>.*?<identification[^>]*\bname\s*=\s*"([^"]+)""#;
             for m in &missing_after {
@@ -152,13 +170,13 @@ pub async fn init_handler(
         &game_data.sector_code_names,
         &game_data.localization,
     )
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let _ = sectors.len();
 
     // Extract pilot info
-    let pilot = crate::parsers::pilot_xml::extract_pilot_info(&save_content, &game_data.localization)
-        .ok();
+    let pilot =
+        crate::parsers::pilot_xml::extract_pilot_info(&save_content, &game_data.localization).ok();
 
     // Persist last-used paths into cache file
     game_data.last_paths = Some(SavedPaths {
@@ -173,7 +191,15 @@ pub async fn init_handler(
         sectors,
         save_path,
         pilot,
+        last_modified: None,
+        content_hash: None,
+        trades_by_sector: HashMap::new(),
+        station_counts: HashMap::new(),
+        stations: Vec::new(),
+        station_lookup: HashMap::new(),
     });
+
+    state.save_repository.ensure_latest().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Json(InitResponse {
         success: true,
@@ -197,13 +223,18 @@ fn collect_sector_macros(xml: &str) -> std::collections::HashSet<String> {
                         if let Ok(attr) = attr {
                             match attr.key.as_ref() {
                                 b"class" if attr.value.as_ref() == b"sector" => is_sector = true,
-                                b"macro" => macro_name = Some(String::from_utf8_lossy(&attr.value).to_string()),
+                                b"macro" => {
+                                    macro_name =
+                                        Some(String::from_utf8_lossy(&attr.value).to_string())
+                                }
                                 _ => {}
                             }
                         }
                     }
                     if is_sector {
-                        if let Some(m) = macro_name { set.insert(m.to_lowercase()); }
+                        if let Some(m) = macro_name {
+                            set.insert(m.to_lowercase());
+                        }
                     }
                 }
             }

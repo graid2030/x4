@@ -8,7 +8,7 @@ mod misc;
 mod dashboard;
 
 // Re-export all public items
-pub use common::AppState;
+pub use common::{AppState, SaveData};
 pub use init::init_handler;
 pub use sectors::{get_sectors, get_sectors_list};
 pub use wares::get_wares;
