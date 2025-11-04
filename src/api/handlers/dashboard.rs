@@ -7,7 +7,7 @@ use crate::models::{
 use crate::parsers::game_xml::resolve_name;
 use crate::parsers::save_xml::{extract_all_trades, load_save_file};
 use crate::parsers::pilot_xml::extract_pilot_info;
-use crate::parsers::assets::extract_player_assets;
+use crate::parsers::assets::{extract_player_assets, extract_player_npcs};
 use crate::services::ArbitrageService;
 
 use super::common::AppState;
@@ -20,16 +20,25 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
 
     let (game, save) = match (game_data.as_ref(), save_data.as_ref()) {
         (Some(g), Some(s)) => (g, s),
-        _ => return Err(StatusCode::BAD_REQUEST),
+        _ => {
+            eprintln!("Dashboard error: Game data or save data not initialized");
+            return Err(StatusCode::BAD_REQUEST);
+        }
     };
 
     // Load save file
     let save_content = load_save_file(&save.save_path)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            eprintln!("Dashboard error loading save file: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     // Extract pilot info
     let pilot_info = extract_pilot_info(&save_content, &game.localization)
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            eprintln!("Dashboard error extracting pilot info: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
 
     // Extract player assets for ship/station counts
     let assets = extract_player_assets(
@@ -38,14 +47,17 @@ pub async fn get_dashboard(State(state): State<AppState>) -> Result<Json<Dashboa
         &game.component_names,
         &game.localization,
     )
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|e| {
+        eprintln!("Dashboard error extracting player assets: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
     // Count ships and stations
     let ships = assets.iter().filter(|a| a.class.contains("ship")).count();
     let stations = assets.iter().filter(|a| a.class == "station").count();
 
     // Extract NPCs count
-    let npcs = crate::parsers::assets::extract_player_npcs(&save_content, &game.localization)
+    let npcs = extract_player_npcs(&save_content, &game.localization)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .len();
 

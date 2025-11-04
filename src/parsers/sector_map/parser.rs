@@ -1,6 +1,4 @@
-use crate::models::{
-    MapAsteroid, MapGate, MapResource, MapShip, MapStation, Position, SectorMapData,
-};
+use crate::models::{Position, SectorMapData};
 use anyhow::Result;
 use quick_xml::events::Event;
 use quick_xml::Reader;
