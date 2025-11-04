@@ -5,6 +5,7 @@ mod wares;
 mod trades;
 mod pilot;
 mod misc;
+mod dashboard;
 
 // Re-export all public items
 pub use common::{AppState, SaveData};
@@ -17,3 +18,4 @@ pub use misc::{
     get_last_paths, get_status, list_save_files, get_sector_map,
     LastPathsResponse, StatusResponse, SaveFileInfo, ListSavesRequest, SectorMapRequest
 };
+pub use dashboard::get_dashboard;
