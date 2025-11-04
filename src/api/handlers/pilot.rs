@@ -18,7 +18,7 @@ pub async fn get_pilot(State(state): State<AppState>) -> Result<Json<PilotInfo>,
 
     let xml = crate::parsers::save_xml::load_save_file(&save_path)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let pilot = crate::parsers::pilot_xml::extract_pilot_info(&xml, &game.localization)
+    let pilot = crate::parsers::pilot_xml::extract_pilot_info(&xml, game.localization_map())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Cache latest pilot in memory
@@ -44,12 +44,12 @@ pub async fn get_player_property(State(state): State<AppState>) -> Result<Json<P
 
     let mut assets: Vec<PlayerAsset> = crate::parsers::assets::extract_player_assets(
         &xml,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
+        game.sector_names_map(),
+        game.component_names_map(),
+        game.localization_map(),
     ).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let npcs: Vec<PlayerNpc> = crate::parsers::assets::extract_player_npcs(&xml, &game.localization)
+    let npcs: Vec<PlayerNpc> = crate::parsers::assets::extract_player_npcs(&xml, game.localization_map())
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Enrich ships with cargo capacity/type and speed from cache
@@ -57,7 +57,7 @@ pub async fn get_player_property(State(state): State<AppState>) -> Result<Json<P
         if a.class.contains("ship") {
             if let Some(mac) = &a.macro_name {
                 let key = mac.to_lowercase();
-                if let Some(sm) = game.ship_meta.get(&key) {
+                if let Some(sm) = game.ship_meta().get(&key) {
                     if a.cargo_capacity.is_none() { a.cargo_capacity = sm.cargo_capacity; }
                     if a.cargo_type.is_none() { a.cargo_type = sm.cargo_type.clone(); }
                     if a.speed.is_none() { a.speed = sm.max_speed; }

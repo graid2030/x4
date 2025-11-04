@@ -1,8 +1,6 @@
 use axum::{extract::State, http::StatusCode, Json};
 use serde::Serialize;
 
-use crate::parsers::game_xml::resolve_name;
-
 use super::common::AppState;
 
 #[derive(Serialize)]
@@ -17,15 +15,11 @@ pub async fn get_wares(State(state): State<AppState>) -> Result<Json<Vec<WareInf
     match game_data.as_ref() {
         Some(data) => {
             let mut items: Vec<WareInfo> = data
-                .wares
+                .wares()
                 .values()
                 .map(|m| WareInfo {
                     id: m.id.clone(),
-                    name: m
-                        .name_ref
-                        .as_ref()
-                        .map(|r| resolve_name(r, &data.localization))
-                        .unwrap_or_else(|| m.id.clone()),
+                    name: data.get_ware_display_name(&m.id),
                 })
                 .collect();
             items.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()))

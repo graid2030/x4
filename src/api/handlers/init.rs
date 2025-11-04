@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::parsers::game_xml::resolve_name;
 use crate::parsers::{extract_sectors, load_save_file, find_cat_files, CatDatReader};
-use crate::services::{GameDataCache, SavedPaths};
+use crate::services::{GameDataCache, GameDataRepository, SavedPaths};
 
 use super::common::{AppState, SaveData};
 
@@ -168,7 +168,7 @@ pub async fn init_handler(
     let _ = game_data.save_to_file(&cache_path);
 
     // Store in state
-    *state.game_data.write().await = Some(game_data);
+    *state.game_data.write().await = Some(GameDataRepository::new(game_data));
     *state.save_data.write().await = Some(SaveData {
         sectors,
         save_path,
