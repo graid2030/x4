@@ -4,12 +4,13 @@ use axum::{
 };
 use tower_http::services::{ServeDir, ServeFile};
 
-use super::handlers::{get_last_paths, get_sectors, get_sectors_list, get_sector_map, get_status, get_trade_offers, get_ware_trades, get_wares, get_pilot, get_player_property, init_handler, list_save_files, AppState};
+use super::handlers::{get_last_paths, get_sectors, get_sectors_list, get_sector_map, get_status, get_trade_offers, get_ware_trades, get_wares, get_pilot, get_player_property, init_handler, list_save_files, get_dashboard, AppState};
 use super::sector_detail::get_sector_detail;
 
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         .route("/api/init", post(init_handler))
+        .route("/api/dashboard", get(get_dashboard))
         .route("/api/sectors/list", get(get_sectors_list))
         .route("/api/sectors/:code", get(get_sector_detail))
         .route("/api/sectors", get(get_sectors))

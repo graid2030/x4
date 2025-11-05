@@ -5,7 +5,7 @@ const { Table, Column, SortDirection } = window.ReactVirtualized;
 
 function number(v) { const n = Number(v); return isFinite(n) ? n : 0; }
 
-function Results({ data, filters, fontScale = 1 }) {
+function Results({ data, filters, fontScale = 1, favorites, onToggleFavorite, getFavoriteKey }) {
   const [sortBy, setSortBy] = useState('total_profit');
   const [sortDirection, setSortDirection] = useState(SortDirection.DESC);
   const [selectedIndex, setSelectedIndex] = useState(-1);
@@ -141,7 +141,23 @@ function Results({ data, filters, fontScale = 1 }) {
           }}
           onRowClick={handleRowClick}
         >
-          <Column label="Ware" dataKey="ware_name" width={220} headerRenderer={header('ware_name')} cellRenderer={({ rowData }) => (rowData.ware_name || rowData.ware || '-') } />
+          <Column label="Ware" dataKey="ware_name" width={220} headerRenderer={header('ware_name')} cellRenderer={({ rowData }) => {
+            const isFavorite = favorites && getFavoriteKey && favorites.has(getFavoriteKey(rowData));
+            return (
+              <span style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
+                {onToggleFavorite && (
+                  <span
+                    style={{cursor: 'pointer', fontSize: '16px', userSelect: 'none'}}
+                    onClick={(e) => { e.stopPropagation(); onToggleFavorite(rowData); }}
+                    title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    {isFavorite ? '⭐' : '☆'}
+                  </span>
+                )}
+                <span>{rowData.ware_name || rowData.ware || '-'}</span>
+              </span>
+            );
+          }} />
           <Column label="Buy From" dataKey="buy_station" width={400} headerRenderer={header('buy_station')} cellRenderer={stationCell('buy')} />
           <Column label="Buy Price" dataKey="buy_price" width={120} className="col-num" headerRenderer={header('buy_price')} cellRenderer={cell('buy_price')} />
           <Column label="Sell To" dataKey="sell_station" width={400} headerRenderer={header('sell_station')} cellRenderer={stationCell('sell')} />

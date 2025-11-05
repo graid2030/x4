@@ -89,5 +89,10 @@ window.API = {
     const res = await fetch(`/api/sectors/${sectorCode}`);
     if (!res.ok) throw new Error(`Failed to load sector detail (${res.status})`);
     return res.json();
+  },
+  async getDashboard() {
+    const res = await fetch('/api/dashboard');
+    if (!res.ok) throw new Error(`Failed to load dashboard (${res.status})`);
+    return res.json();
   }
 };

@@ -32,14 +32,19 @@ pub async fn get_sector_detail(
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Extract stations for this sector
-    let stations = extract_stations_for_sector(&save_content, &sector_code, &game.component_names, &game.faction_names)?;
+    let stations = extract_stations_for_sector(
+        &save_content,
+        &sector_code,
+        game.component_names_map(),
+        game.faction_names_map(),
+    )?;
 
     // Extract all trades and filter by sector
     let all_trades = extract_all_trades(
         &save_content,
-        &game.sector_names,
-        &game.component_names,
-        &game.localization,
+        game.sector_names_map(),
+        game.component_names_map(),
+        game.localization_map(),
         &save.sectors,
     )
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
@@ -60,17 +65,9 @@ pub async fn get_sector_detail(
             unique_wares.insert(trade.ware.clone());
 
             // Resolve ware name from game metadata via localization
-            let ware_name = game.wares.get(&trade.ware)
-                .and_then(|w| w.name_ref.as_ref())
-                .map(|name_ref| {
-                    use crate::parsers::game_xml::resolve_name;
-                    resolve_name(name_ref, &game.localization)
-                })
-                .unwrap_or_else(|| trade.ware.clone());
-
             trade_offers.push(TradeOfferDetail {
                 ware_id: trade.ware.clone(),
-                ware_name,
+                ware_name: game.get_ware_display_name(&trade.ware),
                 trade_type: trade_type_str.to_string(),
                 price: trade.price,
                 amount: trade.amount,
@@ -92,11 +89,10 @@ pub async fn get_sector_detail(
     };
 
     // Map owner to name
-    let owner_name = sector.owner.as_ref().map(|o| {
-        game.faction_names.get(o.as_str())
-            .map(|n| n.to_string())
-            .unwrap_or_else(|| o.clone())
-    });
+    let owner_name = sector
+        .owner
+        .as_ref()
+        .map(|o| game.get_faction_display_name(o));
 
     Ok(Json(SectorDetailResponse {
         code: sector.code.clone(),

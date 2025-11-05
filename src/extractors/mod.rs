@@ -7,4 +7,3 @@ pub mod factions;
 pub use wares::*;
 pub use localization::*;
 pub use sectors::*;
-pub use factions::*;

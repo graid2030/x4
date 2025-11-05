@@ -8,6 +8,7 @@ pub mod assets;
 pub mod sector_map;
 pub mod sector_list;
 pub mod sector_detail;
+pub mod dashboard;
 
 pub use ware::*;
 pub use sector::*;
@@ -18,5 +19,6 @@ pub use assets::*;
 pub use sector_map::*;
 pub use sector_list::*;
 pub use sector_detail::*;
+pub use dashboard::*;
 // Ship module reserved for future use
 // pub use ship::*;
